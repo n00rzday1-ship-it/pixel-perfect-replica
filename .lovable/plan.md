@@ -46,50 +46,40 @@ Sources reviewed November 16, 2026:
 ## Technical architecture
 
 ```text
-Existing AVFetch input
-  -> server-side validation -> capability-aware platform adapter
-  -> real metadata + permitted source references
-  -> authenticated job request -> durable database queue
-Local worker -> authenticated claim API -> bounded source fetch + ffprobe
-  -> FFmpeg -> file verification -> private storage
-  -> progress/completion API -> owner-only job status -> expiring download
+Existing input -> server validation -> official platform adapter
+  -> real metadata + opaque permitted source IDs
+  -> authenticated job -> durable database queue
+Local Linux worker -> authenticated claim -> bounded fetch + ffprobe
+  -> FFmpeg -> verification -> private storage
+  -> real progress/status -> owner-only expiring download
 ```
 
-### Contracts and boundaries
+- Keep pure URL/DTO schemas browser-safe. Separate server-only adapters for each platform; app RPC wrappers in `src/lib/*.functions.ts`, helpers in `*.server.ts`. No native processing dependency enters the app bundle.
+- App calls: `validateMedia`, `analyzeMedia`, `createJob`, `getJob`, `cancelJob`, `getDownload` via TanStack server functions. Revalidate inputs and authorize protected operations; preserve CSRF and add generated bearer middleware after Cloud connection.
+- Worker claim/heartbeat/progress/completion and OAuth callbacks use `/api/public/*` routes with authentication inside handlers. Deploy callbacks before requesting shared secrets. No public local-machine port is needed: the worker polls outbound HTTPS.
+- Analysis DTO includes canonical platform ID, nullable metadata, timestamps/expiry, capability status/reason and genuine format IDs. Keep signed source URLs/tokens in protected server records. Distinguish configuration-required, authorization-required, metadata-only, unavailable, processing-unavailable and ready. Redact secrets from logs; return safe errors.
+- MP4 choices require actual rendition evidence. Probe permitted files when dimensions are absent; no inferred resolutions, fake ladders or upscaling. Remux compatible media; explicitly label any output conversion.
+- MP3 menu proposal: **64, 96, 128, 160, 192, 224, 256, 320 kbps**. Validate server-side and offer only when permitted source audio exists. Output bitrate never improves source quality.
 
-- Keep pure schemas/URL parsing in browser-safe modules; create one server-only adapter per platform behind a shared interface. App RPC wrappers live in `src/lib/*.functions.ts`; server helpers use `*.server.ts`. No Node-only media dependency enters the app bundle.
-- `validateMedia`, `analyzeMedia`, `createJob`, `getJob`, `cancelJob`, `getDownload` are TanStack server functions. Validate again server-side and verify caller/access before protected operations. Preserve CSRF and add generated bearer middleware only after Cloud is connected.
-- Worker claim/heartbeat/progress/completion and provider OAuth callbacks use `/api/public/*` server routes with handler authentication; this prefix is not a security boundary. Worker credentials never reach the browser. Deploy callback endpoints before requesting shared secrets.
-- Analysis DTO: platform, canonical ID/URL, provider identity, nullable metadata, timestamp/expiry, capability status and reason, real source-format IDs. Source URLs/tokens stay in protected server data; frontend receives opaque selection IDs, not arbitrary processing URLs.
-- Separate metadata-only, authorization-required, configuration-required, unavailable, processing-unavailable and ready states. Sanitized user errors; redact tokens and signed URLs from diagnostics. Avoid caching personal results across users.
-- MP4 options come only from accessible renditions with provider/ffprobe evidence. No generated quality ladder or upscaling. Remux/copy compatible media where possible; any conversion is explicitly output encoding, not original quality.
-- MP3 choices: proposed menu **64, 96, 128, 160, 192, 224, 256, 320 kbps**, only for a permitted source with audio. Server validates selections. They describe output bitrate, never original quality. Silent media cannot produce a pretend audio download.
+### Jobs, files and security
 
-### Jobs and storage
+- Durable owner-scoped analysis/source, job, event, output and lease records. Narrow worker operations; browser cannot set progress/completed fields. Atomic claims, bounded retries, idempotency, heartbeats and stale-attempt rejection prevent duplicate work.
+- States: queued, fetching, probing, converting, verifying, completed, failed, cancelled, expired. Progress derives from actual bytes or FFmpeg `-progress` output time/measured duration. Unknown totals are indeterminate; no fabricated overall percentage. Complete only after verified file upload.
+- Non-root pinned Linux container; bounded CPU/memory/disk/time, per-job temporary directories. FFmpeg uses argument arrays and local files, never user URLs/shell commands. Disable conversion/probe networking. Verify codecs, dimensions, duration, audio presence, size and checksum, not only exit status.
+- Private output storage, owner-authorized short-lived download links, safe filenames and attachment headers. Agree configurable retention, file/duration and concurrency caps before rollout. Cleanup in `finally`, at worker startup and through periodic janitors; delete expired stored outputs and record failures/retries.
+- SSRF: never fetch pasted URLs; construct fixed official API requests from validated IDs. Reject credentials, custom ports, IP literals, lookalike hosts and encoded-path tricks. Validate adapter source URLs too, disable automatic redirects, revalidate every allowed hop, bound bytes/time and check file signatures.
+- Native worker resolves all A/AAAA answers, rejects private/loopback/link-local/reserved/metadata addresses, pins the validated address while preserving TLS hostname verification and uses outbound firewall restrictions against DNS rebinding. Do not feed remote playlists to FFmpeg; any later manifest support must validate every nested resource.
+- OAuth uses state, PKCE where supported, minimal scopes, same-origin return destinations and revocation handling. Third-party credentials use secure connector/forms; encrypted server token storage where needed. Never commit/log secrets or cache private results across users.
+- **User decision: defer custom request limits.** Lovable Cloud has no standard limiter; add no ad-hoc implementation. Public paid-provider analysis and public job submission stay disabled pending approved request protection. Authentication, provider quotas and concurrency caps are not substitutes.
 
-- Durable records: authorized source/analysis, processing jobs, job events, private output records and worker leases. Owner-only policies for reads/writes; narrow authenticated worker actions; no broad browser updates to progress/completion fields.
-- States: queued, fetching, probing, converting, verifying, completed, failed, cancelled, expired. Atomically claim leased jobs; heartbeats, bounded retries, idempotent completion and stale-lease recovery prevent duplicate work. A stale attempt cannot overwrite a newer attempt.
-- Real progress: received bytes when length is known; FFmpeg `-progress` output time versus measured duration for conversion. Unknown total means indeterminate progress; use stage-specific progress, not a fake overall timer. Completed only after file verification and successful private upload.
-- Local worker polls over outbound HTTPS, so no public port on the local machine is needed. Use a non-root pinned container with CPU/memory/disk/time limits and a job-specific temporary directory. FFmpeg receives argument arrays and local files, not user URLs or shell strings; network access disabled during probing/conversion.
-- Verify ffprobe output, expected codec/container, audio presence, dimensions, duration, byte size and checksum. Successful process exit alone is insufficient. Owner-authorized expiring storage links, sanitized filename and attachment headers gate downloads.
-- Configurable retention and file/duration/concurrency caps must be agreed before processing rollout. Cleanup in `finally` plus startup and periodic janitors removes failed/cancelled/crashed-job files and expired storage objects; retries are recorded. Do not rely on browser activity for cleanup.
+## Incremental implementation and verification
 
-### SSRF and access protection
-
-- Never fetch the pasted URL directly. Parse exact host/path/media ID and construct requests to fixed official API origins. Block credentials, custom ports, IP literals, encoded-path tricks and lookalike hosts.
-- Adapter-returned source URLs also require validation. Disable automatic redirects; revalidate every permitted hop, restrict HTTPS/CDN hosts, bound response bytes/time and validate file signatures. Expired URLs trigger authorized refresh, not a fallback scraper.
-- On the native worker, validate all DNS A/AAAA answers and connect to the validated public address while preserving TLS hostname verification. Block loopback/private/link-local/reserved/metadata addresses and enforce outbound firewall rules; reject DNS rebinding. Do not pass remote playlists to FFmpeg; any future manifest support must validate every nested resource.
-- Protect OAuth with state, PKCE where supported and same-origin return destinations. Use secure connector/credential forms for third-party keys, server-only encrypted token storage where required, revocation handling and minimal scopes. Never log or commit secrets.
-- **User decision: defer custom request limits.** Lovable Cloud has no standard request-limiting primitive. No ad-hoc limiter will be added. Public paid-provider analysis and public job submission remain disabled pending an approved protection solution. Provider quotas, authentication and worker concurrency caps are not substitutes for request limiting.
-
-## Incremental delivery and tests
-
-1. **Validation foundation:** strict platform IDs/paths, DTO schemas, adapter registry and real server validation. Test all four platforms plus malformed IDs, private hosts, credentials, redirects and lookalikes. Unconfigured adapters return explicit capability failures, not sample metadata.
-2. **YouTube metadata pilot:** configure an approved developer key, request real metadata, handle unavailable/private/quota errors and wire only the existing Analyze result area. Confirm real title/thumbnail/duration through the UI; formats/downloads stay disabled.
-3. **Authorized Instagram/LinkedIn adapters:** prove account/product access first, then test permalink/URN resolution, missing media URLs, expiry, ownership and revocation. X follows only after billing approval. Fixture-based unit tests are clearly test data, never app results.
-4. **Cloud job foundation:** activate Cloud with approval, add ownership policies and atomic job/lease operations. Test cross-user access, forged worker messages, replay/stale attempts, cancellation and offline recovery. Keep processing restricted while request protection is deferred.
-5. **Local processing pilot:** run a real user-owned authorized file through native ffprobe/FFmpeg, validate all listed MP3 bitrates and actual MP4 formats, report real progress, retrieve the verified output through the UI, then prove expiry and cleanup. Credentials/hardware availability are prerequisites; never call fixture-only results end-to-end verification.
-6. **Release gate:** SSRF/redirect/DNS tests, file and resource limits, authorization audit, quota/cost measurements and desktop/mobile regression checks. Update privacy/availability copy only to match delivered behavior. Public processing waits for request protection, verified source permissions and a reachable worker. Publish app code separately; schema changes apply immediately.
+1. **Validation foundation:** strict platform ID/path parsers, schemas, registry and server validation. Tests for all platforms, malformed IDs, private hosts, credentials, redirects/lookalikes. Unconfigured adapters return explicit failures, never demo metadata.
+2. **YouTube metadata pilot:** approved key/access, genuine metadata and unavailable/private/quota handling; wire only the existing result area. Verify real title/thumbnail/duration through the UI; formats/downloads remain disabled.
+3. **Authorized adapters:** prove Instagram/LinkedIn account/product access first; then test permalink/URN resolution, missing sources, expiry and revocation. X waits for billing approval. Fixtures exist only in tests.
+4. **Cloud jobs:** activate with approval; owner policies, atomic claims and leases. Test cross-user access, forged/replayed worker calls, stale attempts, cancellation and offline recovery. Keep processing restricted while request protection is deferred.
+5. **Local processing pilot:** real authorized user-owned file through ffprobe/FFmpeg; test each listed MP3 bitrate and source-derived MP4 choice. Verify progress, downloadable output read-back, expiry and cleanup in the UI. Fixture-only runs are not end-to-end verification.
+6. **Release gate:** SSRF/DNS/redirect tests, resource bounds, permissions audit, measured quota/cost use, phone/desktop regression checks. Update privacy/availability copy narrowly. Public processing requires approved request protection, permissions and reachable worker. App code needs publishing; database changes apply immediately.
 
 ## Required external inputs / blockers
 
