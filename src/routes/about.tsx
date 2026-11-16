@@ -1,0 +1,4 @@
+import { createFileRoute } from '@tanstack/react-router';
+import { InfoPage, pageHead } from '@/components/info-page';
+export const Route = createFileRoute('/about')({ head: () => pageHead('About AVFetch', 'AVFetch is an authorized media project developed by Noorzzz.'), component: Page });
+function Page() { return <InfoPage title="Audio. Video. Quality." intro="AVFetch is developed by Noorzzz, with a focus on real source quality and user-controlled media formats."><section><h2>Let’s Fetch Quality.</h2><p>The project is being built incrementally. The current frontend recognizes supported platform links, separates MP4 and MP3 output modes, and communicates availability honestly. It does not yet retrieve or process media.</p></section></InfoPage>; }

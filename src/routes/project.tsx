@@ -1,0 +1,4 @@
+import { createFileRoute } from '@tanstack/react-router';
+import { InfoPage, pageHead } from '@/components/info-page';
+export const Route = createFileRoute('/project')({ head: () => pageHead('GitHub Project', 'AVFetch open-source project and development availability.'), component: Page });
+function Page() { return <InfoPage title="Built in the open." intro="AVFetch · Developed by Noorzzz."><section><h2>GitHub repository pending</h2><p>The public repository URL has not been supplied yet. This page will link to the verified AVFetch repository once it is available.</p></section><section><h2>Development status</h2><p>Phase 1 is the branded frontend and link validation. Future phases add authorized integrations, real media processing, security verification, and deployment documentation.</p></section></InfoPage>; }
