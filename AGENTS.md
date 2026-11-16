@@ -33,3 +33,4 @@ use the editor.
 - Keep shared navigation in a client-safe shell and content in TanStack leaf routes so every page has independent metadata.
 - Keep URL recognition in a pure validated module, with tests; Phase 1 must never fetch external media or invent analysis results.
 - Future authorized platform adapters must return real format DTOs; CPU-intensive conversion belongs on a separate processing host, not this app runtime.
+- Keep platform capabilities behind server-only adapters and expose validated DTOs through TanStack server functions; this prevents provider credentials and source URLs from entering client code.
