@@ -28,3 +28,8 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Application architecture
+- Keep shared navigation in a client-safe shell and content in TanStack leaf routes so every page has independent metadata.
+- Keep URL recognition in a pure validated module, with tests; Phase 1 must never fetch external media or invent analysis results.
+- Future authorized platform adapters must return real format DTOs; CPU-intensive conversion belongs on a separate processing host, not this app runtime.
