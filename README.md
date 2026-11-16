@@ -1,6 +1,6 @@
-# Pixel Perfect Replica
+# AVFetch
 
-Implement exactly the screenshot and nothing else
+Audio. Video. Quality. — Developed by Noorzzz
 
 This project was built with [Lovable](https://lovable.dev).
 
