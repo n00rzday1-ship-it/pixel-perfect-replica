@@ -8,40 +8,39 @@ Preserve the existing logo, neon-green design, animations, navigation and phone/
 
 ## Existing code review
 
-- Inspected the source tree, all content routes, shared shell, styles, UI library, link validation, tests, configuration and runtime/error support. Dependencies contain no media provider SDK, database client, queue, FFmpeg or processing service. No backend is connected.
-- `src/routes/index.tsx` calls the synchronous browser-only `recognizeMedia`. Analyze does not make a network request. MP4/MP3 switches change the mode, not actual formats. The missing service message is intentional, not a failed download request.
-- `src/lib/media.ts` validates HTTPS, exact platform hosts, credentials, ports and length. It does **not** validate platform media-ID/path syntax: profile/search/non-media paths can pass. Harden this before server access. Existing tests use abbreviated example IDs and must be updated alongside stricter rules.
-- `src/start.ts` already has error and CSRF middleware; preserve both. `src/server.ts` is an SSR error wrapper, not a processing host. The hosting runtime cannot spawn FFmpeg or provide durable local job/file state.
-- All ten content pages have individual title, description and social metadata through `pageHead`; preserve these. Privacy, terms, FAQ and platform availability must be updated narrowly when real data handling changes.
-- Baseline: both existing test files passed, **5/5 tests**. These establish current recognition/routing behavior, not media integration correctness. No runtime/UI edits were made.
+Reviewed the source tree, content routes, shell, styles, UI library, validation, tests, configuration and runtime support. There is no connected backend, provider SDK, queue or processing host.
 
-## Verified platform feasibility
+- Analyze calls browser-only `recognizeMedia`, with no network request. MP4/MP3 changes mode only. The unavailable-service message is intentional.
+- Validation checks HTTPS, exact hosts, credentials, ports and length, but accepts non-media platform paths. Add strict IDs/paths before server access; update abbreviated test IDs.
+- Preserve existing CSRF/error middleware, shared shell and all ten independently described content pages. The server entry is an SSR wrapper, not an FFmpeg host.
+- Baseline tests passed: **5/5** across both existing files. These verify recognition/routing, not media integration. No application code changed.
 
-| Platform | Genuine metadata | Actual media and formats | Authorization and launch decision |
-| --- | --- | --- | --- |
-| YouTube | Data API `videos.list` can return title, thumbnails and ISO-8601 duration; inaccessible/deleted/private videos may return no item. | Data API does not provide playable rendition URLs or a downloadable resolution list. `definition=hd` is not a format. OAuth/file details do not grant download access. | Public metadata needs a developer project/key and quota. Private metadata needs appropriate OAuth. Ship **metadata-only** first; downloads/audio extraction blocked unless a separately approved source and platform permission exist. |
-| Instagram | Official API can return caption, media type, permalink, thumbnail and `media_url` when permitted. Caption is not a video title. Duration/resolution may require probing a permitted file. | May supply a single permitted source, not a full quality ladder. Licensed/copyrighted audio and some disabled-download settings can cause `media_url` omission even when other metadata is available. | Start with explicitly authorized Business/Creator account media. Instagram Login uses `instagram_business_basic`; Facebook Login has different permissions/Page requirements. App review/access may be required for non-test users. Arbitrary pasted personal/private reels are not guaranteed accessible. Resolve permalink against accessible media records, never scrape shortcode pages. |
-| LinkedIn | Approved Posts/Videos access can return post text, thumbnail and duration, with fields absent when unavailable. | Videos API documents optional `downloadUrl` and expiry; not every accessible post yields a media file or rendition list. Probe only a permitted returned source. | Requires approved API product, OAuth scopes and owner/organization-role access. General member read access is restricted; write permission is not read permission. Resolve supported post identifiers, then authorized video URN. Start only after real account access is proven. |
-| X | Post lookup with media expansion can return post text, preview image, duration, dimensions and `variants`. Text must be identified as post text, not an invented title. | Return only actual variants. MP4 variants may expose bitrate without variant-specific dimensions; probe each permitted file rather than copying overall dimensions or inferring resolution from bitrate. | Official API requires developer credentials and currently charges pay-per-use. Keep adapter disabled until costs and permitted use are approved. Builder app-only access is not permission to read each user's protected account. |
+## Platform feasibility
 
-API-returned URLs are not, by themselves, permission to redistribute or convert. Each adapter must enforce an approved use case and record access provenance. Missing fields remain `null`; formats remain empty when inaccessible. No scraping, yt-dlp fallback, cookie uploads, DRM workarounds or invented resolutions.
-
-Sources reviewed November 16, 2026:
-- [YouTube video resource](https://developers.google.com/youtube/data/reference/rest/v3/videos) and [developer policies](https://developers.google.com/youtube/terms/developer-policies): audiovisual downloading/storage requires YouTube's prior written approval.
-- [Instagram media](https://developers.facebook.com/documentation/instagram-platform/reference/instagram-media) and [business discovery limitations](https://developers.facebook.com/documentation/instagram-platform/instagram-graph-api/reference/ig-user/business_discovery).
-- [LinkedIn Posts](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-10) and [Videos](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/videos-api?view=li-lms-2026-09). Pin a supported API version; do not use the retiring 202511 version.
-- [X media fields](https://docs.x.com/x-api/fundamentals/data-dictionary) and [pricing](https://docs.x.com/x-api/getting-started/pricing). Current published post reads are $0.005/resource; other operations differ. Recheck Developer Console before enabling; no paid service is activated by this plan.
-
-## Infrastructure and free-tier assessment
-
-| Layer | Proposed use | Free-tier reality |
+| Platform | Real capabilities | Access and limitations |
 | --- | --- | --- |
-| Existing app hosting | Validation, short provider requests, authentication, job orchestration and status | No FFmpeg, native binaries or background loops. Standalone Cloudflare Workers Free documents 100,000 requests/day, 10 ms CPU/invocation and 128 MB memory; these are **not** an assertion of this Lovable project's hosting quota. |
-| Lovable Cloud | Built-in database, logins and private storage for durable jobs | Default for implementation. Check this workspace's current allowance/cost before activation; do not equate Lovable Cloud billing with a standalone provider free tier. |
-| External managed Postgres free tier, evaluated for comparison | Jobs, leases, access records and short-lived private outputs | Published reference allowance: 500 MB database, 1 GB storage, 5 GB egress plus 5 GB cached egress; projects can pause after one week inactive. Not adequate for unlimited video storage/download traffic. Connecting an external service is not part of this first task. |
-| Local Linux processing worker | Native FFmpeg/ffprobe, sandboxed downloads and conversion | Open-source dependencies have no software fee. Existing hardware still needs electricity, bandwidth, disk and uptime. Jobs stall while the machine is offline. No guaranteed always-on free production transcoding host is established. |
+| YouTube | Data API returns title, thumbnails and duration. | Developer key/quota for public metadata; OAuth for permitted private metadata. No downloadable rendition URLs/quality ladder. Ship metadata-only; audiovisual downloading/storage requires prior written YouTube approval. Ownership/OAuth alone is insufficient. |
+| Instagram | Caption, thumbnail and permitted `media_url`; probe permitted source for missing duration/dimensions. | Start with authorized Business/Creator media; appropriate login permissions and potentially app review. Resolve permalink against accessible records, not scraping. May return one source, not a quality ladder. Licensed audio/download restrictions can omit media URLs. Arbitrary personal/private reels are not guaranteed accessible. |
+| LinkedIn | Approved Posts/Videos access may return post text, thumbnail, duration and optional expiring `downloadUrl`. | Product approval, OAuth scopes and owner/organization roles required. Member reads are restricted; write access does not imply read access. Resolve supported post IDs to authorized video URNs. Missing file URLs remain unavailable. |
+| X | Post/media expansion returns text, preview, duration and actual variants. | Developer access and paid reads required. Enable only after cost/use approval. Probe variant-specific dimensions rather than inferring from bitrate. Shared app-only tokens cannot read each user's protected account. |
 
-[Cloudflare pricing](https://developers.cloudflare.com/workers/platform/pricing/) / [limits](https://developers.cloudflare.com/workers/platform/limits/), and [managed database pricing reference](https://supabase.com/pricing). Recheck quotas before rollout. Use private storage for small verified test outputs initially; measure actual transfer usage before public launch.
+API source access does not automatically authorize conversion/redistribution. Adapters record approved use and access provenance. Missing fields stay null and missing formats empty. Identify captions/post text honestly, not invented video titles. No scraping, yt-dlp fallback, cookies or DRM workarounds.
+
+### Official sources reviewed November 16, 2026
+
+- [YouTube resource](https://developers.google.com/youtube/data/reference/rest/v3/videos), [policies](https://developers.google.com/youtube/terms/developer-policies).
+- [Instagram media](https://developers.facebook.com/documentation/instagram-platform/reference/instagram-media), [media URL restrictions](https://developers.facebook.com/documentation/instagram-platform/instagram-graph-api/reference/ig-user/business_discovery). Instagram Login uses `instagram_business_basic`; Facebook Login differs.
+- [LinkedIn Posts](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-10), [Videos](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/videos-api?view=li-lms-2026-09). Pin supported API versions, not retiring 202511.
+- [X fields](https://docs.x.com/x-api/fundamentals/data-dictionary), [pricing](https://docs.x.com/x-api/getting-started/pricing): published post reads $0.005/resource; other operations differ. Recheck console before enabling.
+
+## Free infrastructure assessment
+
+- **Existing app hosting:** short API requests, validation and orchestration only; no FFmpeg or durable local state. Standalone Cloudflare Workers Free documents 100,000 requests/day, 10 ms CPU and 128 MB memory. These are not this Lovable project's verified quotas. [Pricing](https://developers.cloudflare.com/workers/platform/pricing/) / [limits](https://developers.cloudflare.com/workers/platform/limits/).
+- **Lovable Cloud:** default built-in database, logins and private storage when implementation begins. Check workspace allowances/cost before activation; do not equate its billing with standalone free-tier quotas.
+- **External managed database free-tier comparison:** 500 MB database, 1 GB files, 5 GB egress plus 5 GB cached egress; inactivity may pause projects after one week. Not unlimited video hosting. No external connection is proposed for this first task. [Pricing reference](https://supabase.com/pricing).
+- **Local Linux worker:** free open-source FFmpeg/ffprobe on existing hardware, but electricity, bandwidth, disk and uptime remain costs. Jobs wait when offline. No guaranteed always-on free production transcoding host is established.
+
+Small private test outputs fit a pilot; measure transfers before launch. Unlimited free downloads, unrestricted platform access and free X reads cannot be promised. No paid service is activated by this plan.
 
 ## Technical architecture
 
