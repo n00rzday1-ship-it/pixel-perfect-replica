@@ -1,0 +1,6 @@
+import { createFileRoute } from '@tanstack/react-router';
+import { InfoPage, pageHead } from '@/components/info-page';
+import { PlatformIcon } from '@/components/platform-icon';
+import type { Platform } from '@/lib/media';
+export const Route = createFileRoute('/platforms')({ head: () => pageHead('Platform Availability', 'Transparent integration status for YouTube, Instagram, LinkedIn, and X.'), component: Page });
+function Page() { return <InfoPage title="Your platforms. One place." intro="URL recognition is available. Authorized metadata retrieval, format discovery, and downloading are not yet connected.">{(['YouTube', 'Instagram', 'LinkedIn', 'X'] as Platform[]).map(platform => <section key={platform} className="flex gap-4 border-b border-border pb-6"><div className="platform-icon shrink-0"><PlatformIcon platform={platform} /></div><div><h2>{platform}</h2><p>Link recognition available · Media integration not connected.</p><p>Access depends on the platform’s official permissions and available functionality. Private content, DRM, and authentication restrictions will not be bypassed.</p></div></section>)}</InfoPage>; }

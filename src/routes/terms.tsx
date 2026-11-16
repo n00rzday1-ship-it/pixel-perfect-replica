@@ -1,0 +1,4 @@
+import { createFileRoute } from '@tanstack/react-router';
+import { InfoPage, pageHead } from '@/components/info-page';
+export const Route = createFileRoute('/terms')({ head: () => pageHead('Terms of Use', 'Authorized use and current preview limitations for AVFetch.'), component: Page });
+function Page() { return <InfoPage title="Permission comes first." intro="Preview terms — these are not a substitute for legal review before launch."><section><h2>Authorized use only</h2><p>Only submit media you own, have explicit permission to download, or are otherwise legally authorized to save. Respect copyright, platform terms, and access restrictions. Do not submit cookies or credentials to circumvent those restrictions.</p></section><section><h2>Current availability</h2><p>AVFetch is a frontend preview. Media retrieval, conversion, quality discovery, and downloads are not yet available. No availability guarantee is made for any platform or format.</p></section></InfoPage>; }
